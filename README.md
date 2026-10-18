@@ -1,11 +1,14 @@
-# Yahoo Fantasy Football Autopilot
+# 🏈 Yahoo Fantasy Football Autopilot
 
-A multi-league Yahoo Fantasy Football helper and automation tool that checks your teams, starting lineups, available free agents, and weekly matchups every day against **FantasyPros Weekly Expert Consensus Rankings (ECR) & Projections**.
+> **Built with Gemini / Antigravity Autopilot** — This full-stack application (Python FastAPI backend, React + Tailwind CSS frontend, SQLite persistence, and multi-arch Docker deployment for Unraid) was architected and written autonomously by **Google Gemini / Antigravity**.
+
+A multi-league Yahoo Fantasy Football helper and automation tool that checks your teams, starting lineups, available free agents, opponent rosters, and weekly matchups every day against **FantasyPros Weekly & Rest-of-Season (ROS) Expert Consensus Rankings (ECR)**.
 
 ## Key Features
 - **Multi-League Support**: Automatically discovers all of your active Yahoo NFL leagues (`Standard`, `Half-PPR`, `Full PPR`, `Superflex`) and respects each league's exact starting slot constraints.
-- **Lineup Optimizer**: Solves the optimal starting lineup using FantasyPros Weekly ECR & projections, automatically flagging starters on `BYE` or marked `Out`/`IR`/`Doubtful` and recommending bench-to-starter swaps.
-- **Free Agent & Waiver Wire Analyzer**: Compares available free agents & waiver targets in each league against both your optimal starters (`Starter Upgrade`) and your lowest-projected bench players (`Bench Upgrade`), complete with suggested drop candidates.
+- **Lineup Optimizer & Locked-Game Detection**: Solves the optimal starting lineup using FantasyPros Weekly ECR & projections, automatically flagging starters on `BYE` or marked `Out`/`IR`/`Doubtful`/`Questionable`, while pinning and excluding players whose games have already kicked off (e.g., Thursday Night Football `🔒 Played (Locked)`).
+- **Free Agent & Waiver Wire Analyzer with ROS Protection**: Compares available free agents & waiver targets against both your starters (`Starter Upgrade`) and bench (`Bench Upgrade`), while checking **FantasyPros Rest-of-Season (ROS) ECR** so high-value injured or bye-week stashes are never recommended as drops.
+- **League Teams & Scouting**: Inspect every team in your league—standings, points for/against, weekly projected starter points, lineup readiness, and full rosters with Weekly & ROS rankings.
 - **Daily HTML Email Digest (Gmail SMTP)**: Sends a consolidated morning briefing via Gmail App Password (`smtp.gmail.com:587`) summarizing matchup projections, lineup swaps, and waiver targets across all your leagues.
 - **Advisory Mode vs. Auto-Lineup Mode**:
   - Defaults to **Advisory Mode** + **Dry-Run Safety Switch** so it only emails and displays recommendations.
@@ -29,11 +32,14 @@ PYTHONPATH=backend .venv/bin/pytest backend/tests -v
 
 ---
 
-## Deploying with Docker on Unraid
+## Deploying with Docker / Unraid
 
-1. Build and start with Docker Compose:
+Published on Docker Hub as `nkgilley/fantasy-football-autopilot:latest` (`linux/amd64` & `linux/arm64`).
+
+1. Build or pull with Docker Compose:
    ```bash
-   docker compose up -d --build
+   docker compose up -d
    ```
 2. On **Unraid**, map the container's `/data` volume to `/mnt/user/appdata/fantasy-football-autopilot` and port `8000` to `8000`.
 3. All Yahoo OAuth tokens, Gmail SMTP settings, and league configurations can be edited directly in the **Settings & OAuth** tab of the Web UI and are persisted in `/data/autopilot.db`.
+
