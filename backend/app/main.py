@@ -49,8 +49,10 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         has_leagues = db.query(League).count() > 0
-        if not has_leagues:
-            logger.info("Seeding initial multi-league data & FantasyPros recommendations...")
+        eff = get_effective_settings(db)
+        has_kickoffs = bool(eff.get("upcoming_kickoffs_json") and eff.get("upcoming_kickoffs_json") != "[]")
+        if not has_leagues or not has_kickoffs:
+            logger.info("Initializing league data & NFL kickoff schedule...")
             await run_daily_autopilot_pipeline(
                 db=db,
                 trigger_source="startup",
@@ -101,6 +103,8 @@ class SettingsUpdatePayload(BaseModel):
     email_from: str | None = None
     email_to: str | None = None
     daily_sync_time: str | None = None
+    pre_game_sync_enabled: bool | None = None
+    pre_game_minutes_before: int | None = None
     timezone: str | None = None
     default_execution_mode: str | None = None
     dry_run: bool | None = None
@@ -607,6 +611,8 @@ def save_settings(payload: SettingsUpdatePayload, db: Session = Depends(get_db))
     updates = payload.model_dump(exclude_none=True)
     if "dry_run" in updates:
         updates["dry_run"] = "true" if updates["dry_run"] else "false"
+    if "pre_game_sync_enabled" in updates:
+        updates["pre_game_sync_enabled"] = "true" if updates["pre_game_sync_enabled"] else "false"
     update_settings(db, updates)
     configure_daily_scheduler()
     return read_settings(db)

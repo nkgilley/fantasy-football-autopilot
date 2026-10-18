@@ -199,15 +199,21 @@ FP_ROS_SLUGS: dict[str, str] = {
 
 def _format_kickoff_label(kickoff_ts: Any, game_status: str) -> tuple[str, bool]:
     from datetime import datetime
+    import time
     from zoneinfo import ZoneInfo
 
     st = (game_status or "").strip().lower()
     is_locked = st in ("closed", "complete", "final", "inprogress", "halftime", "live")
     day_time = ""
+    ts_int = 0
     if kickoff_ts:
         try:
-            dt = datetime.fromtimestamp(int(kickoff_ts), tz=ZoneInfo("America/New_York"))
+            ts_int = int(kickoff_ts)
+            dt = datetime.fromtimestamp(ts_int, tz=ZoneInfo("America/New_York"))
             day_time = dt.strftime("%a %-I:%M %p")
+            if ts_int <= int(time.time()) and not is_locked:
+                is_locked = True
+                st = "inprogress"
         except Exception:
             day_time = ""
 
@@ -223,6 +229,7 @@ def _index_player_entry(index: dict[str, dict[str, Any]], entry: dict[str, Any])
     norm_pos = normalize_position(entry["pos"])
     norm_team = normalize_team(entry["team"])
 
+    kickoff_ts = int(entry.get("kickoff_ts") or 0)
     if norm_team and entry.get("game_time") is not None:
         team_games = index.setdefault("__team_games__", {})
         if norm_team not in team_games or entry.get("is_locked"):
@@ -230,7 +237,20 @@ def _index_player_entry(index: dict[str, dict[str, Any]], entry: dict[str, Any])
                 "game_time": entry.get("game_time", ""),
                 "is_locked": bool(entry.get("is_locked", False)),
                 "opp": entry.get("opp", ""),
+                "kickoff_ts": kickoff_ts,
             }
+
+    if kickoff_ts > 0 and norm_team:
+        windows = index.setdefault("__kickoff_windows__", {})
+        w_key = str(kickoff_ts)
+        if w_key not in windows:
+            windows[w_key] = {
+                "kickoff_ts": kickoff_ts,
+                "status": str(entry.get("game_status") or ""),
+                "teams": [],
+            }
+        if norm_team not in windows[w_key]["teams"]:
+            windows[w_key]["teams"].append(norm_team)
 
     index[f"{norm_name}|{norm_pos}|{norm_team}"] = entry
     index[f"{norm_name}|{norm_pos}"] = entry
@@ -343,10 +363,9 @@ def parse_fantasypros_html(html: str, pos: str) -> list[dict[str, Any]]:
                 if proj <= 0.0 and ecr < 150:
                     proj = _estimate_points_from_ecr(norm_pos, ecr)
                 opp = str(p.get("player_opponent") or "")
-                game_time, is_locked = _format_kickoff_label(
-                    p.get("player_game_kickoff_ts"),
-                    str(p.get("player_game_status") or ""),
-                )
+                raw_ts = p.get("player_game_kickoff_ts")
+                raw_status = str(p.get("player_game_status") or "")
+                game_time, is_locked = _format_kickoff_label(raw_ts, raw_status)
                 results.append(
                     {
                         "name": name,
@@ -359,6 +378,8 @@ def parse_fantasypros_html(html: str, pos: str) -> list[dict[str, Any]]:
                         "opp": opp,
                         "game_time": game_time,
                         "is_locked": is_locked,
+                        "kickoff_ts": int(raw_ts) if raw_ts else 0,
+                        "game_status": raw_status,
                         "ros_ecr": 420 + ecr,
                         "ros_pos_rank": f"{norm_pos}--",
                         "source": "fantasypros_live",

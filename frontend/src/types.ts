@@ -125,6 +125,16 @@ export interface LeagueDetailResponse {
   yahoo_xml_preview: string;
 }
 
+export interface ScheduledJobInfo {
+  id: string;
+  type: "daily" | "pre_kickoff";
+  label: string;
+  time_str: string;
+  kickoff_time: string | null;
+  teams: string[];
+  next_run_time: string;
+}
+
 export interface OverviewResponse {
   leagues: LeagueSummary[];
   oauth: {
@@ -138,6 +148,10 @@ export interface OverviewResponse {
     running: boolean;
     next_run_time: string | null;
     daily_sync_time: string;
+    daily_times?: string[];
+    pre_game_sync_enabled?: boolean;
+    pre_game_minutes_before?: number;
+    scheduled_jobs?: ScheduledJobInfo[];
     timezone: string;
     dry_run: boolean;
   };
@@ -167,6 +181,8 @@ export interface AppSettings {
   email_from: string;
   email_to: string;
   daily_sync_time: string;
+  pre_game_sync_enabled?: boolean;
+  pre_game_minutes_before?: number;
   timezone: string;
   default_execution_mode: "advisory" | "auto_lineup";
   dry_run: boolean;

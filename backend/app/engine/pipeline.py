@@ -16,7 +16,7 @@ from app.models import (
     RosterPlayer,
 )
 from app.notifications.email import render_daily_digest_email, send_smtp_email
-from app.settings_store import get_effective_settings
+from app.settings_store import get_effective_settings, update_settings
 from app.yahoo.auth import get_oauth_status
 from app.yahoo.client import get_yahoo_client
 from app.yahoo.writer import apply_yahoo_lineup_changes
@@ -344,10 +344,42 @@ async def run_daily_autopilot_pipeline(
             }
         )
 
+    # Merge and persist any discovered NFL game kickoff windows from FantasyPros
+    merged_windows: dict[int, dict[str, Any]] = {}
+    for fp_idx in fp_cache.values():
+        for w in (fp_idx.get("__kickoff_windows__") or {}).values():
+            ts_val = int(w.get("kickoff_ts") or 0)
+            if ts_val <= 0:
+                continue
+            entry = merged_windows.setdefault(
+                ts_val,
+                {"kickoff_ts": ts_val, "status": str(w.get("status") or ""), "teams": []},
+            )
+            if w.get("status"):
+                entry["status"] = str(w["status"])
+            for tm in w.get("teams") or []:
+                if tm not in entry["teams"]:
+                    entry["teams"].append(tm)
+
+    if merged_windows:
+        sorted_windows = [
+            {
+                "kickoff_ts": k,
+                "status": merged_windows[k]["status"],
+                "teams": sorted(merged_windows[k]["teams"]),
+            }
+            for k in sorted(merged_windows.keys())
+        ]
+        update_settings(db, {"upcoming_kickoffs_json": json.dumps(sorted_windows)})
+
     subject, email_html = render_daily_digest_email(email_leagues_payload)
     email_result = {"sent": False, "recipient": eff_settings.get("email_to", "")}
-    # Always send email when scheduled/requested OR when auto-lineup applied lineup changes
-    if send_email or lineup_changes_applied > 0:
+    should_send_email = (
+        send_email
+        or lineup_changes_applied > 0
+        or (str(trigger_source).startswith("pre_kickoff") and total_swaps_count > 0)
+    )
+    if should_send_email:
         email_result = send_smtp_email(db, subject, email_html)
 
     run_record = RecommendationRun(
@@ -380,6 +412,14 @@ async def run_daily_autopilot_pipeline(
     db.add(run_record)
     db.commit()
     db.refresh(run_record)
+
+    if merged_windows and not str(trigger_source).startswith("test"):
+        try:
+            from app.scheduler import configure_daily_scheduler
+
+            configure_daily_scheduler()
+        except Exception as exc:
+            logger.debug("Could not refresh scheduler after pipeline run: %s", exc)
 
     return {
         "run_id": run_record.id,

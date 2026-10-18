@@ -17,6 +17,9 @@ SETTING_KEYS = {
     "email_from": lambda: settings.email_from,
     "email_to": lambda: settings.email_to,
     "daily_sync_time": lambda: settings.daily_sync_time,
+    "pre_game_sync_enabled": lambda: "true" if settings.pre_game_sync_enabled else "false",
+    "pre_game_minutes_before": lambda: str(settings.pre_game_minutes_before),
+    "upcoming_kickoffs_json": lambda: "[]",
     "timezone": lambda: settings.timezone,
     "default_execution_mode": lambda: settings.default_execution_mode,
     "dry_run": lambda: "true" if settings.dry_run else "false",
@@ -33,6 +36,8 @@ def get_effective_settings(db: Session) -> dict[str, Any]:
         result[key] = val
 
     result["smtp_port"] = int(result["smtp_port"] or 587)
+    result["pre_game_minutes_before"] = int(result.get("pre_game_minutes_before") or 5)
+    result["pre_game_sync_enabled"] = str(result.get("pre_game_sync_enabled", "true")).lower() in ("true", "1", "yes")
     result["dry_run"] = str(result["dry_run"]).lower() in ("true", "1", "yes")
     return result
 

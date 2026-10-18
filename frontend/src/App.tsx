@@ -349,11 +349,28 @@ export default function App() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 flex items-center gap-3 mt-0.5">
+              <p className="text-xs text-slate-400 flex flex-wrap items-center gap-3 mt-0.5">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5 text-slate-500" />
-                  Daily Sync: {overview?.scheduler.daily_sync_time} ({overview?.scheduler.timezone})
+                  Daily: {overview?.scheduler.daily_sync_time}
+                  {overview?.scheduler.pre_game_sync_enabled !== false && (
+                    <span className="text-indigo-400 font-medium">
+                      + {overview?.scheduler.pre_game_minutes_before ?? 5}m Pre-Kickoff
+                    </span>
+                  )}{" "}
+                  ({overview?.scheduler.timezone})
                 </span>
+                {overview?.scheduler.scheduled_jobs && overview.scheduler.scheduled_jobs.length > 0 && (
+                  <>
+                    <span>•</span>
+                    <span className="text-slate-300">
+                      Next Check:{" "}
+                      <strong className="text-indigo-300">
+                        {overview.scheduler.scheduled_jobs[0].label}
+                      </strong>
+                    </span>
+                  </>
+                )}
                 <span>•</span>
                 <span className="inline-flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -1612,20 +1629,25 @@ export default function App() {
               {/* Scheduler & Safety Section */}
               <div className="space-y-3 pt-3 border-t border-slate-800">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-                  3. Daily Schedule &amp; Lineup Execution Safety
+                  3. Daily Schedule, Game-Day Pre-Kickoff Checks &amp; Safety
                 </h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-slate-300 mb-1">Daily Run Time (24h)</label>
+                    <label className="block text-xs text-slate-300 mb-1">
+                      Daily Check Time(s) <span className="text-slate-500">(24h, comma-separated)</span>
+                    </label>
                     <input
                       type="text"
                       value={settingsForm.daily_sync_time}
                       onChange={(e) =>
                         setSettingsForm({ ...settingsForm, daily_sync_time: e.target.value })
                       }
-                      placeholder="08:00"
+                      placeholder="08:00, 12:00"
                       className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white"
                     />
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      Always runs once a day (or at each listed time, e.g. <code>08:00, 12:00</code>).
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs text-slate-300 mb-1">Timezone</label>
@@ -1641,7 +1663,75 @@ export default function App() {
                   </div>
                 </div>
 
-                <label className="flex items-center gap-3 pt-2 cursor-pointer">
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsForm.pre_game_sync_enabled ?? true}
+                        onChange={(e) =>
+                          setSettingsForm({
+                            ...settingsForm,
+                            pre_game_sync_enabled: e.target.checked,
+                          })
+                        }
+                        className="w-4 h-4 rounded accent-indigo-600"
+                      />
+                      <span className="text-xs text-slate-200 font-semibold">
+                        ⚡ Game-Day Pre-Kickoff Checks (Check before every NFL kickoff window)
+                      </span>
+                    </label>
+
+                    <div className="flex items-center gap-2 text-xs text-slate-300">
+                      <span>Run</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={settingsForm.pre_game_minutes_before ?? 5}
+                        onChange={(e) =>
+                          setSettingsForm({
+                            ...settingsForm,
+                            pre_game_minutes_before: Math.max(1, parseInt(e.target.value || "5", 10)),
+                          })
+                        }
+                        className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-center text-white font-bold"
+                      />
+                      <span>min before kickoff</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Automatically detects every NFL game kickoff window each week (TNF, Sunday London/Early/Late/SNF, MNF, Saturday) and runs a fresh check right before kickoff to catch late inactive announcements.
+                  </p>
+
+                  {overview?.scheduler.scheduled_jobs && overview.scheduler.scheduled_jobs.length > 0 && (
+                    <div className="pt-2 border-t border-slate-800/80">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Upcoming Scheduled Checks ({overview.scheduler.scheduled_jobs.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {overview.scheduler.scheduled_jobs.map((job) => (
+                          <span
+                            key={job.id}
+                            title={job.teams && job.teams.length > 0 ? `Teams: ${job.teams.join(", ")}` : job.label}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border ${
+                              job.type === "pre_kickoff"
+                                ? "bg-indigo-950/60 text-indigo-200 border-indigo-800/60"
+                                : "bg-emerald-950/50 text-emerald-200 border-emerald-800/60"
+                            }`}
+                          >
+                            {job.type === "pre_kickoff" ? "🏈" : "⏰"} {job.label}
+                            {job.teams && job.teams.length > 0 && (
+                              <span className="text-slate-400">({job.teams.length} teams)</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <label className="flex items-center gap-3 pt-1 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={settingsForm.dry_run}
@@ -1651,7 +1741,7 @@ export default function App() {
                     className="w-4 h-4 rounded accent-indigo-600"
                   />
                   <span className="text-xs text-slate-300">
-                    <strong>Dry-Run Safety Switch</strong> (When checked, Yahoo roster <code>PUT</code> calls are simulated and logged without modifying your live Yahoo lineup)
+                    <strong>Dry-Run Safety Switch</strong> (When checked, Yahoo roster updates are simulated and logged without modifying your live Yahoo lineup)
                   </span>
                 </label>
               </div>

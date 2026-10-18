@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     # Scheduler & Execution Defaults
     daily_sync_time: str = "08:00"
+    pre_game_sync_enabled: bool = True
+    pre_game_minutes_before: int = 5
     timezone: str = "America/New_York"
     default_execution_mode: str = "advisory"  # "advisory" | "auto_lineup"
     dry_run: bool = True
