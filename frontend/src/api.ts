@@ -48,7 +48,10 @@ export async function applyLeagueOptimalLineup(leagueKey: string): Promise<any> 
   const res = await fetch(`/api/leagues/${encodeURIComponent(leagueKey)}/apply-lineup`, {
     method: "POST",
   });
-  if (!res.ok) throw new Error(`Failed applying lineup`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed applying lineup (${res.status})`);
+  }
   return res.json();
 }
 
