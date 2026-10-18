@@ -200,12 +200,13 @@ class YahooFantasyClient:
         if not roster_slots:
             roster_slots = ["QB", "RB", "RB", "WR", "WR", "TE", "W/R/T", "K", "DEF", "BN", "BN", "BN", "BN", "BN", "BN", "IR"]
 
-        scoring_type = "half_ppr"
         stat_mods = flat.get("stat_modifiers", {}).get("stats", [])
+        # In Yahoo Fantasy, if Receptions (stat_id 11) is omitted from stat_modifiers, the league is Standard (Non-PPR)
+        scoring_type = "std" if stat_mods else "half_ppr"
         for s in stat_mods:
             stat = s.get("stat", {}) if isinstance(s, dict) else {}
             if str(stat.get("stat_id")) == "11":
-                val = float(stat.get("value", 0.5))
+                val = float(stat.get("value", 0.0))
                 if val >= 0.9:
                     scoring_type = "ppr"
                 elif val <= 0.1:
