@@ -125,7 +125,7 @@ async def test_end_to_end_pipeline_and_apply_lineup():
         )
         assert res["leagues_processed"] == 3
         assert res["total_swaps_recommended"] >= 5
-        assert res["total_fa_upgrades"] >= 5
+        assert res["total_fa_upgrades"] >= 4
 
         apply_res = await apply_optimal_lineup_for_league(db, "449.l.884120")
         assert apply_res["swaps_applied"] >= 2

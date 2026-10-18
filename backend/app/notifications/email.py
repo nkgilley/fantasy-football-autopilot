@@ -79,17 +79,36 @@ EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
       </div>
 
-      <!-- Recommended Lineup Swaps -->
+      <!-- Recommended or Auto-Applied Lineup Swaps -->
+      {% if lg.auto_applied and lg.swaps %}
+      <div style="background:linear-gradient(135deg,#064e3b 0%,#065f46 100%);border:1px solid #10b981;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;color:#6ee7b7;">
+          {% if lg.auto_applied_live %}
+            &#9889; Auto-Lineup Executed Live on Yahoo ({{ lg.swaps|length }} Swap{{ 's' if lg.swaps|length > 1 else '' }} Applied)
+          {% else %}
+            &#129514; Auto-Lineup Simulated in Dry-Run Mode ({{ lg.swaps|length }} Swap{{ 's' if lg.swaps|length > 1 else '' }})
+          {% endif %}
+        </div>
+        <div style="font-size:12px;color:#d1fae5;margin-top:3px;">
+          {% if lg.auto_applied_live %}
+            Your Yahoo starting lineup for <strong>{{ lg.team_name }}</strong> was automatically updated from <strong>{{ "%.1f"|format(lg.current_proj) }} pts</strong> to <strong>{{ "%.1f"|format(lg.optimal_proj) }} pts (+{{ "%.1f"|format(lg.net_gain) }} pts)</strong>:
+          {% else %}
+            Dry-Run safety switch is enabled. Disable Dry-Run in Settings &amp; OAuth to apply these swaps automatically on Yahoo:
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
       <h3 style="margin:0 0 10px 0;font-size:14px;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;">
         1. Recommended Starting Lineup Swaps ({{ lg.swaps|length }})
       </h3>
+      {% endif %}
       {% if lg.swaps %}
       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:18px;font-size:13px;">
         <thead>
           <tr style="background-color:#0f172a;color:#94a3b8;text-align:left;">
             <th style="padding:8px 10px;border-radius:6px 0 0 6px;">Slot</th>
-            <th style="padding:8px 10px;">Start (From Bench)</th>
-            <th style="padding:8px 10px;">Sit (Current Starter)</th>
+            <th style="padding:8px 10px;">{% if lg.auto_applied and lg.auto_applied_live %}Moved Into Lineup{% else %}Start (From Bench){% endif %}</th>
+            <th style="padding:8px 10px;">{% if lg.auto_applied and lg.auto_applied_live %}Moved to Bench{% else %}Sit (Current Starter){% endif %}</th>
             <th style="padding:8px 10px;text-align:right;border-radius:0 6px 6px 0;">Proj Gain</th>
           </tr>
         </thead>
@@ -102,6 +121,9 @@ EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
               <div style="font-size:11px;color:#94a3b8;">
                 FP {{ sw.player_in.fp_pos_rank }} • {{ "%.1f"|format(sw.player_in.fp_proj) }} pts • {{ sw.player_in.opponent }}
               </div>
+              {% if sw.reason %}
+              <div style="font-size:11px;color:#cbd5e1;margin-top:3px;">{{ sw.reason }}</div>
+              {% endif %}
             </td>
             <td style="padding:10px;">
               <div style="font-weight:600;color:#f87171;">&darr; {{ sw.player_out.name }} ({{ sw.player_out.team }})</div>
@@ -189,10 +211,18 @@ EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
 
 def render_daily_digest_email(leagues_payload: list[dict[str, Any]]) -> tuple[str, str]:
     total_swaps = sum(len(lg.get("swaps", [])) for lg in leagues_payload)
+    total_auto_applied = sum(
+        len(lg.get("swaps", [])) for lg in leagues_payload if lg.get("auto_applied") and lg.get("auto_applied_live")
+    )
     total_fa_upgrades = sum(len(lg.get("fa_upgrades", [])) for lg in leagues_payload)
     now_str = datetime.now().strftime("%a, %b %d • %I:%M %p")
 
-    if total_swaps > 0:
+    if total_auto_applied > 0:
+        subject = (
+            f"⚡ Fantasy Autopilot: Applied {total_auto_applied} Auto-Lineup Swap(s) on Yahoo "
+            f"({total_fa_upgrades} Waiver Upgrades)"
+        )
+    elif total_swaps > 0:
         subject = f"🏈 Fantasy Autopilot: {total_swaps} Lineup Swap(s) & {total_fa_upgrades} Waiver Upgrade(s) Across {len(leagues_payload)} Leagues"
     else:
         subject = f"🏈 Fantasy Autopilot: All {len(leagues_payload)} Lineups Optimal ({total_fa_upgrades} Waiver Upgrades Found)"

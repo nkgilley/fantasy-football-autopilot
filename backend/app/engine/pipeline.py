@@ -200,12 +200,14 @@ async def run_daily_autopilot_pipeline(
         total_fa_count += len(fa_upgrades)
 
         # If league is configured for auto_lineup and has swaps, execute (or dry-run)
+        auto_applied = False
+        auto_applied_live = False
         if exec_mode == "auto_lineup" and swaps:
             pos_payload = [
                 {"player_key": p["player_key"], "position": p["optimal_slot"]}
                 for p in opt_result["players"]
             ]
-            await apply_yahoo_lineup_changes(
+            auto_res = await apply_yahoo_lineup_changes(
                 db=db,
                 team_key=existing_lg.team_key,
                 week=existing_lg.current_week,
@@ -213,11 +215,20 @@ async def run_daily_autopilot_pipeline(
                 dry_run=bool(eff_settings.get("dry_run", True)),
                 is_demo=existing_lg.is_demo,
             )
+            auto_applied = True
+            auto_applied_live = bool(auto_res.get("executed_live", False))
             lineup_changes_applied += len(swaps)
 
         # Replace RosterPlayer rows for this league
         db.query(RosterPlayer).filter(RosterPlayer.league_key == lkey).delete()
         for p in opt_result["players"]:
+            effective_cur_slot = p.get("optimal_slot", "BN") if auto_applied_live else p.get("current_slot", "BN")
+            effective_is_cur_starter = (
+                bool(p.get("is_starter_optimal", False))
+                if auto_applied_live
+                else bool(p.get("is_starter_current", False))
+            )
+            effective_action = "keep" if auto_applied_live else p.get("action_needed", "keep")
             db.add(
                 RosterPlayer(
                     league_key=lkey,
@@ -226,7 +237,7 @@ async def run_daily_autopilot_pipeline(
                     team=p.get("team", ""),
                     position=p["position"],
                     eligible_positions_json=json.dumps(p.get("eligible_positions", [p["position"]])),
-                    current_slot=p.get("current_slot", "BN"),
+                    current_slot=effective_cur_slot,
                     optimal_slot=p.get("optimal_slot", "BN"),
                     status=p.get("status", "Healthy"),
                     injury_note=p.get("injury_note", ""),
@@ -240,10 +251,10 @@ async def run_daily_autopilot_pipeline(
                     fp_tier=int(p.get("fp_tier", 5)),
                     ros_ecr=int(p.get("ros_ecr", 999)),
                     ros_pos_rank=p.get("ros_pos_rank", ""),
-                    is_starter_current=bool(p.get("is_starter_current", False)),
+                    is_starter_current=effective_is_cur_starter,
                     is_starter_optimal=bool(p.get("is_starter_optimal", False)),
-                    action_needed=p.get("action_needed", "keep"),
-                    swap_reason=p.get("swap_reason", ""),
+                    action_needed=effective_action,
+                    swap_reason="" if auto_applied_live else p.get("swap_reason", ""),
                 )
             )
 
@@ -296,7 +307,7 @@ async def run_daily_autopilot_pipeline(
             MatchupSnapshot(
                 league_key=lkey,
                 week=existing_lg.current_week,
-                my_projected_points=cur_proj,
+                my_projected_points=opt_proj if auto_applied_live else cur_proj,
                 my_optimal_projected_points=opt_proj,
                 opponent_team_name=raw_matchup.get("opponent_team_name", "Opponent"),
                 opponent_manager=raw_matchup.get("opponent_manager", ""),
@@ -318,6 +329,8 @@ async def run_daily_autopilot_pipeline(
                 "team_standing": existing_lg.team_standing,
                 "num_teams": existing_lg.num_teams,
                 "execution_mode": existing_lg.execution_mode,
+                "auto_applied": auto_applied,
+                "auto_applied_live": auto_applied_live,
                 "current_proj": cur_proj,
                 "optimal_proj": opt_proj,
                 "net_gain": opt_result["net_gain"],
@@ -333,7 +346,8 @@ async def run_daily_autopilot_pipeline(
 
     subject, email_html = render_daily_digest_email(email_leagues_payload)
     email_result = {"sent": False, "recipient": eff_settings.get("email_to", "")}
-    if send_email:
+    # Always send email when scheduled/requested OR when auto-lineup applied lineup changes
+    if send_email or lineup_changes_applied > 0:
         email_result = send_smtp_email(db, subject, email_html)
 
     run_record = RecommendationRun(
@@ -387,8 +401,8 @@ async def apply_optimal_lineup_for_league(
 ) -> dict[str, Any]:
     """
     Applies the currently recommended optimal starting lineup for a specific league.
-    Calls Yahoo's PUT /team/{team_key}/roster endpoint (or simulates if dry_run/demo)
-    and updates the local roster state so the UI reflects the applied changes.
+    Submits lineup changes to Yahoo (or simulates if dry_run/demo), sends an email notification
+    with the swap details, and updates the local roster state so the UI reflects the applied changes.
     """
     league = db.query(League).filter(League.league_key == league_key).first()
     if not league:
@@ -399,11 +413,57 @@ async def apply_optimal_lineup_for_league(
     if not players:
         raise ValueError(f"No roster found for league {league_key}.")
 
+    promoted = sorted(
+        [p for p in players if p.action_needed == "promote_to_starter"],
+        key=lambda x: x.fp_proj,
+        reverse=True,
+    )
+    remaining_benched = sorted(
+        [p for p in players if p.action_needed == "bench_player"],
+        key=lambda x: x.fp_proj,
+    )
+    swaps_for_email: list[dict[str, Any]] = []
+    for p_in in promoted:
+        p_out = next(
+            (b for b in remaining_benched if b.current_slot == p_in.optimal_slot),
+            None,
+        )
+        if p_out is None and remaining_benched:
+            p_out = remaining_benched[0]
+        if p_out is None:
+            continue
+        remaining_benched.remove(p_out)
+        swaps_for_email.append(
+            {
+                "slot": p_in.optimal_slot,
+                "player_in": {
+                    "name": p_in.name,
+                    "team": p_in.team,
+                    "position": p_in.position,
+                    "fp_pos_rank": p_in.fp_pos_rank,
+                    "fp_proj": p_in.fp_proj,
+                    "opponent": p_in.opponent,
+                },
+                "player_out": {
+                    "name": p_out.name,
+                    "team": p_out.team,
+                    "position": p_out.position,
+                    "status": p_out.status,
+                    "fp_proj": p_out.fp_proj,
+                },
+                "points_delta": round(p_in.fp_proj - p_out.fp_proj, 1),
+                "reason": p_in.swap_reason,
+            }
+        )
+
+    cur_proj_before = round(sum(p.fp_proj for p in players if p.is_starter_current), 1)
+    opt_proj_after = round(sum(p.fp_proj for p in players if p.is_starter_optimal), 1)
+
     player_positions = [
         {"player_key": p.player_key, "position": p.optimal_slot}
         for p in players
     ]
-    swaps_applied = sum(1 for p in players if p.action_needed == "promote_to_starter")
+    swaps_applied = len(promoted)
 
     write_result = await apply_yahoo_lineup_changes(
         db=db,
@@ -414,6 +474,58 @@ async def apply_optimal_lineup_for_league(
         is_demo=league.is_demo,
     )
 
+    matchup = db.query(MatchupSnapshot).filter(MatchupSnapshot.league_key == league_key).first()
+
+    # Send email notification detailing the lineup change if swaps were applied
+    email_result: dict[str, Any] = {"sent": False}
+    if swaps_for_email:
+        fas = db.query(FreeAgentCandidate).filter(FreeAgentCandidate.league_key == league_key).all()
+        league_email_payload = [
+            {
+                "league_key": league.league_key,
+                "name": league.name,
+                "scoring_label": SCORING_LABELS.get(league.scoring_type, league.scoring_type.upper()),
+                "current_week": league.current_week,
+                "team_name": league.team_name,
+                "team_record": league.team_record,
+                "team_standing": league.team_standing,
+                "num_teams": league.num_teams,
+                "execution_mode": league.execution_mode,
+                "auto_applied": True,
+                "auto_applied_live": bool(write_result.get("executed_live", False)),
+                "current_proj": cur_proj_before,
+                "optimal_proj": opt_proj_after,
+                "net_gain": round(opt_proj_after - cur_proj_before, 1),
+                "matchup": {
+                    "opponent_team_name": matchup.opponent_team_name if matchup else "Opponent",
+                    "opponent_record": matchup.opponent_record if matchup else "0-0-0",
+                    "opponent_projected_points": matchup.opponent_projected_points if matchup else 0.0,
+                },
+                "swaps": swaps_for_email,
+                "fa_upgrades": [
+                    {
+                        "name": f.name,
+                        "team": f.team,
+                        "position": f.position,
+                        "availability_type": f.availability_type,
+                        "percent_owned": f.percent_owned,
+                        "opponent": f.opponent,
+                        "fp_pos_rank": f.fp_pos_rank,
+                        "fp_tier": f.fp_tier,
+                        "fp_proj": f.fp_proj,
+                        "recommended_drop_player_name": f.recommended_drop_player_name,
+                        "recommended_drop_player_proj": f.recommended_drop_player_proj,
+                        "recommendation_type": f.recommendation_type,
+                        "net_starter_gain": f.net_starter_gain,
+                        "net_bench_gain": f.net_bench_gain,
+                    }
+                    for f in fas
+                ],
+            }
+        ]
+        subject, html = render_daily_digest_email(league_email_payload)
+        email_result = send_smtp_email(db, subject, html)
+
     # Update local RosterPlayer slots to match optimal slots
     for p in players:
         p.current_slot = p.optimal_slot
@@ -421,7 +533,6 @@ async def apply_optimal_lineup_for_league(
         p.action_needed = "keep"
         p.swap_reason = ""
 
-    matchup = db.query(MatchupSnapshot).filter(MatchupSnapshot.league_key == league_key).first()
     if matchup:
         matchup.my_projected_points = matchup.my_optimal_projected_points
 
@@ -432,4 +543,5 @@ async def apply_optimal_lineup_for_league(
         "league_name": league.name,
         "swaps_applied": swaps_applied,
         "yahoo_response": write_result,
+        "email_result": email_result,
     }
