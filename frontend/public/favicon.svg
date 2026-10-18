@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="ballGrad" x1="10" y1="10" x2="54" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#b45309"/>
+      <stop offset="50%" stop-color="#92400e"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-45 32 32)">
+    <!-- Football body -->
+    <ellipse cx="32" cy="32" rx="26" ry="15" fill="url(#ballGrad)" stroke="#451a03" stroke-width="2.5"/>
+    <!-- White stripes near tips -->
+    <path d="M13 22.5 C15 28.5 15 35.5 13 41.5" stroke="#fef3c7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M51 22.5 C49 28.5 49 35.5 51 41.5" stroke="#fef3c7" stroke-width="3" stroke-linecap="round"/>
+    <!-- Seam & Laces -->
+    <line x1="21" y1="32" x2="43" y2="32" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="24" y1="28" x2="24" y2="36" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="29.3" y1="27.5" x2="29.3" y2="36.5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="34.7" y1="27.5" x2="34.7" y2="36.5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="40" y1="28" x2="40" y2="36" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
+</svg>

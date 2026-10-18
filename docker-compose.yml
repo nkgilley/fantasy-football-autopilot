@@ -1,0 +1,26 @@
+services:
+  fantasy-autopilot:
+    image: nkgilley/fantasy-football-autopilot:latest
+    build: .
+    container_name: fantasy-football-autopilot
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATA_DIR=/data
+      - TIMEZONE=${TIMEZONE:-America/New_York}
+      - DAILY_SYNC_TIME=${DAILY_SYNC_TIME:-08:00}
+      - DEFAULT_EXECUTION_MODE=${DEFAULT_EXECUTION_MODE:-advisory}
+      - DRY_RUN=${DRY_RUN:-true}
+      - YAHOO_CLIENT_ID=${YAHOO_CLIENT_ID:-}
+      - YAHOO_CLIENT_SECRET=${YAHOO_CLIENT_SECRET:-}
+      - YAHOO_REDIRECT_URI=${YAHOO_REDIRECT_URI:-http://localhost:8000/api/auth/yahoo/callback}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_APP_PASSWORD=${SMTP_APP_PASSWORD:-}
+      - EMAIL_FROM=${EMAIL_FROM:-}
+      - EMAIL_TO=${EMAIL_TO:-}
+    volumes:
+      # On Unraid, map this to /mnt/user/appdata/fantasy-football-autopilot:/data
+      - ./data:/data

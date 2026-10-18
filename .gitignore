@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+
+# Environment, Credentials & Local Data
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+*secret*
+*credentials*
+*token*.json
+
+# OS & Editor
+.DS_Store
+.idea/
+.vscode/
