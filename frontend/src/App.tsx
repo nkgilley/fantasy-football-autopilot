@@ -742,6 +742,43 @@ export default function App() {
                   </span>
                 </div>
               )}
+
+              {/* Starter Injury / Questionable Alerts Callout */}
+              {(() => {
+                const flaggedStarters = leagueDetail.roster.filter(
+                  (p) =>
+                    p.is_starter_current &&
+                    ["O", "OUT", "IR", "D", "Q", "BYE"].includes((p.status || "").toUpperCase())
+                );
+                if (flaggedStarters.length === 0) return null;
+                return (
+                  <div className="mt-3 p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/60 flex items-start gap-3 text-amber-200 text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="font-bold text-amber-300">
+                        {flaggedStarters.length} Starter Status Alert{flaggedStarters.length > 1 ? "s" : ""} (Monitor Pre-Game Inactives):
+                      </div>
+                      <div className="text-slate-300 flex flex-wrap gap-2">
+                        {flaggedStarters.map((st) => (
+                          <span
+                            key={st.player_key}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-950/80 border border-amber-800/50"
+                          >
+                            <strong className="text-white">{st.name}</strong>
+                            <span className="text-slate-400">({st.current_slot})</span>
+                            {renderStatusBadge(st.status)}
+                            <span className="text-emerald-400 font-semibold">{st.fp_proj.toFixed(1)} pts</span>
+                            {st.game_time ? <span className="text-slate-400">• {st.game_time}</span> : null}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Questionable starters with strong FantasyPros projections remain in your optimal lineup unless downgraded to Out before kickoff.
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Full Team Roster Table */}
@@ -853,6 +890,11 @@ export default function App() {
                             ) : isBench ? (
                               <span className="px-2.5 py-1 rounded-full font-bold bg-rose-950 text-rose-300 border border-rose-700">
                                 &darr; Move to Bench
+                              </span>
+                            ) : p.is_starter_current &&
+                              ["O", "OUT", "IR", "D", "Q", "BYE"].includes((p.status || "").toUpperCase()) ? (
+                              <span className="px-2.5 py-1 rounded-full font-semibold bg-amber-950/60 text-amber-300 border border-amber-800/70">
+                                ⚠ Monitor {p.status} ({p.current_slot})
                               </span>
                             ) : (
                               <span className="text-slate-500">Keep ({p.current_slot})</span>
